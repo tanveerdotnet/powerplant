@@ -1,0 +1,9 @@
+version : '3'
+services: # Services to deploy
+  
+  powerplant-api:
+    image: powerplant-img:latest #image name, Default:- Folder Name
+    build:
+      dockerfile : Dockerfile # path to Dockerfile
+    ports:
+      - "8888:80" # HOST_PORT:CONTAINER_PORT
