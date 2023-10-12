@@ -22,7 +22,7 @@ public class ProductionPlanController : ControllerBase
     [Route("calculateproduction")]
     public IActionResult CalculateProduction([FromBody] object jsonPayload)
     {
-        if (jsonPayload is null && string.IsNullOrEmpty(Convert.ToString(jsonPayload)))
+        if (jsonPayload is null || string.IsNullOrEmpty(Convert.ToString(jsonPayload)))
             return StatusCode(500, "Please provide valid data for calculating the production plan.");        
         else
         {
