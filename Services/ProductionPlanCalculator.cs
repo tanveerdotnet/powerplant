@@ -7,44 +7,71 @@ public class ProductionPlanCalculator : IProductionPlanCalculator
 {
     public List<ProductionPlanOutput> CalculateProduction(Payload payload)
     {
-        var productionPlan = new List<ProductionPlanOutput>();
+        List<ProductionPlanOutput> productionPlan = new List<ProductionPlanOutput>();
 
         // Calculate wind power
-        foreach (var windPlant in payload.Powerplants.Where(p => p.Type == PowerPlantType.windturbine))
+        double windPower = (payload.Powerplants
+            .Where(pp => pp.Type == PowerPlantType.windturbine)
+            .Sum(pp => (pp.Pmax * payload.Fuels.Wind) / 100.0)) * payload.Fuels.Wind / 100.0;
+
+        // Allocate wind power to wind turbines
+        foreach (var windPlant in payload.Powerplants.Where(pp => pp.Type == PowerPlantType.windturbine))
         {
-            var windPower = (windPlant.Pmax * payload.Fuels.Wind) / 100.0;
-            productionPlan.Add(new ProductionPlanOutput { Name = windPlant.Name, Power = windPower });
+            double windAllocation = (windPlant.Pmax * payload.Fuels.Wind) / 100.0;
+            productionPlan.Add(new ProductionPlanOutput
+            {
+                Name = windPlant.Name,
+                Power = Math.Round(windAllocation, 2)
+            });
         }
 
-        // Calculate gas and turbojet power in order of decreasing efficiency.
-        // This approach maximizes the usage of the most efficient power plants first. 
+        // Calculate gas-fired and turbojet power
+        double remainingLoad = payload.Load - windPower;
         var gasAndTurbojetPlants = payload.Powerplants
-            .Where(p => p.Type == PowerPlantType.gasfired || p.Type == PowerPlantType.turbojet)
-            .OrderByDescending(p => p.Efficiency);
+            .Where(pp => pp.Type == PowerPlantType.gasfired || pp.Type == PowerPlantType.turbojet)
+            .OrderByDescending(pp => pp.Efficiency);
 
         foreach (var plant in gasAndTurbojetPlants)
         {
-            var power = CalculateGasOrTurbojetPower(plant, payload);
-            productionPlan.Add(new ProductionPlanOutput { Name = plant.Name, Power = power });
+            double efficiency = plant.Efficiency;
+            double costPerMWh = 0;
+
+            if (plant.Type == PowerPlantType.gasfired)
+            {
+                costPerMWh = payload.Fuels.Gas / efficiency;
+            }
+            else if (plant.Type == PowerPlantType.turbojet)
+            {
+                costPerMWh = payload.Fuels.Kerosine / efficiency;
+            }
+
+            double power = Math.Max(plant.Pmin, Math.Min(remainingLoad, plant.Pmax));
+
+            productionPlan.Add(new ProductionPlanOutput
+            {
+                Name = plant.Name,
+                Power = Math.Round(power, 2),
+            });
+
+            remainingLoad -= power;
+
+            if (remainingLoad <= 0)
+                break;
         }
 
-        // Order by power in descending order
-        productionPlan = productionPlan.OrderByDescending(p => p.Power).ToList();
+        // Set remaining gas and turbojet plants to 0 power
+        foreach (var plant in gasAndTurbojetPlants)
+        {
+            if (productionPlan.All(pp => pp.Name != plant.Name))
+            {
+                productionPlan.Add(new ProductionPlanOutput
+                {
+                    Name = plant.Name,
+                    Power = 0.0,
+                });
+            }
+        }
 
         return productionPlan;
-    }
-
-    private double CalculateGasOrTurbojetPower(PowerPlant plant, Payload payload)
-    {
-        var efficiency = plant.Efficiency;
-        var fuelCost = plant.Type == PowerPlantType.gasfired ? payload.Fuels.Gas : payload.Fuels.Kerosine;
-
-        var power = (efficiency * payload.Load) / fuelCost;
-
-        // Ensure power is within Pmin and Pmax
-        power = Math.Max(power, plant.Pmin);
-        power = Math.Min(power, plant.Pmax);
-
-        return Math.Round(power * 10) / 10;
     }
 }

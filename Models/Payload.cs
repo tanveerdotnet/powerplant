@@ -9,7 +9,6 @@ public class Payload
     [JsonProperty("load")]
     public double Load { get; set; }
 
-    //[JsonConverter(typeof(FuelConverter))]
     [JsonProperty("fuels")]
     public Fuel Fuels { get; set; } = new();
 
